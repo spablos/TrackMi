@@ -68,6 +68,7 @@ const DEFAULTS = {
   days: {},        // 'YYYY-MM-DD' -> { water, sleep, weight }
   workouts: [],    // { id, date, title, type, duration, exercises:[{name,sets,reps,weight}], notes, done }
   templates: [],   // { id, title, type, duration, exercises }
+  lifts: [],       // תרגילי כוח { id, name, sets, reps, step, logs:[{id,date,sets:[{w,r}]}] }
   meals: [],       // { id, date, slot, name, kcal, protein, carbs, fat, eaten }
   favs: [],        // ארוחות מועדפות { id, name, slot, kcal, protein, carbs, fat }
   foods: [],       // ספריית מזונות לבחירה מהירה { name, kcal, protein, carbs, fat }
@@ -455,6 +456,139 @@ function vFood() {
   ${favsCard()}`;
 }
 
+/* ---------- מעקב כוח ---------- */
+const logsOf = l => [...(l.logs || [])].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+const topW = log => Math.max(0, ...log.sets.map(x => x.w || 0));
+const setsText = log => log.sets.map(x => (x.w ? `<span class="ltr">${fmt1(x.w)}×${x.r || 0}</span>` : `${x.r || 0} חז׳`)).join(' · ');
+function liftPR(l) {
+  let best = null;
+  for (const g of logsOf(l)) for (const x of g.sets) if (!best || (x.w || 0) > best.w || ((x.w || 0) === best.w && (x.r || 0) > best.r)) best = { w: x.w || 0, r: x.r || 0, date: g.date };
+  return best;
+}
+/* העלאה הדרגתית: אם בפעם האחרונה כל הסטים הגיעו ליעד החזרות, מעלים משקל. אחרת נשארים ומנסים להשלים חזרות. */
+function nextPlan(l) {
+  const L = logsOf(l), last = L[L.length - 1];
+  const target = l.reps || 10, nSets = l.sets || 3, step = l.step || 2.5;
+  if (!last) return null;
+  const w = topW(last), work = last.sets.filter(x => (x.w || 0) === w);
+  const hit = work.length >= nSets && work.every(x => (x.r || 0) >= target);
+  if (w === 0) {
+    const r = Math.max(...last.sets.map(x => x.r || 0));
+    return { w: 0, r: hit ? r + 1 : target, up: hit, text: hit ? `להוסיף חזרה: ${nSets} סטים של ${r + 1}` : `לנסות ${nSets} סטים של ${target} חזרות` };
+  }
+  if (hit) return { w: Math.round((w + step) * 100) / 100, r: target, up: true, text: `להעלות ל־<b>${fmt1(w + step)}</b> ק״ג · ${nSets} סטים של ${target}` };
+  return { w, r: target, up: false, text: `להישאר על <b>${fmt1(w)}</b> ק״ג ולהשלים ${nSets} סטים של ${target}` };
+}
+function spark(l) {
+  const L = logsOf(l).filter(g => topW(g) > 0).slice(-12);
+  if (L.length < 2) return '';
+  const W = 300, H = 44, p = 5, vs = L.map(topW), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+  const P = vs.map((v, i) => [W - p - (i / (vs.length - 1)) * (W - 2 * p), H - p - ((v - lo) / span) * (H - 2 * p)]);
+  const d = P.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
+  const e = P[P.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${d} L${e[0].toFixed(1)} ${H} L${P[0][0].toFixed(1)} ${H} Z" fill="var(--train)" fill-opacity=".12"/>
+    <path d="${d}" fill="none" stroke="var(--train)" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    <circle cx="${e[0]}" cy="${e[1]}" r="3.5" fill="var(--train)"/></svg>`;
+}
+function liftChart(l) {
+  const L = logsOf(l).filter(g => topW(g) > 0);
+  if (L.length < 2) return '';
+  const W = 340, H = 160, pl = 10, pr = 40, pt = 14, pb = 26;
+  const t0 = parseKey(L[0].date).getTime(), t1 = parseKey(L[L.length - 1].date).getTime();
+  let lo = Math.min(...L.map(topW)), hi = Math.max(...L.map(topW));
+  const step = hi - lo > 30 ? 10 : hi - lo > 12 ? 5 : 2.5;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi === lo) { hi += step; lo = Math.max(0, lo - step); }
+  const x = t => W - pr - ((t - t0) / (t1 - t0 || 1)) * (W - pl - pr), y = v => pt + ((hi - v) / (hi - lo)) * (H - pt - pb);
+  const ticks = []; const every = Math.ceil((hi - lo) / step / 4);
+  for (let v = lo, i = 0; v <= hi + 1e-9; v += step, i++) if (i % every === 0) ticks.push(v);
+  const P = L.map(g => [x(parseKey(g.date).getTime()), y(topW(g))]);
+  const d = P.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="המשקל הגבוה בכל אימון">
+    ${ticks.map(v => `<line class="gridl" x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}"/><text x="${W - pr + 6}" y="${y(v) + 3.5}">${fmt1(v)}</text>`).join('')}
+    <path d="${d}" fill="none" stroke="var(--train)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    ${P.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="${i === P.length - 1 ? 5 : 3}" fill="${i === P.length - 1 ? 'var(--train)' : 'var(--surface)'}" stroke="var(--train)" stroke-width="1.8"/>`).join('')}
+    <text x="${W - pr}" y="${H - 8}" text-anchor="end">${fmtShort(L[0].date)}</text>
+    <text x="${pl}" y="${H - 8}" text-anchor="start" class="strong">${fmtShort(L[L.length - 1].date)}</text></svg>`;
+}
+function vLift() {
+  const lifts = [...S.lifts].sort((a, b) => {
+    const la = logsOf(a).pop(), lb = logsOf(b).pop();
+    return (lb ? lb.date : '') < (la ? la.date : '') ? -1 : (lb ? lb.date : '') > (la ? la.date : '') ? 1 : 0;
+  });
+  const head = `<section class="card train"><div class="card-head"><h2 class="card-title">${I.train} תרגילי כוח</h2>
+    <button class="btn primary small" data-act="lift-new">+ תרגיל</button></div>
+    <p class="small muted">לכל תרגיל רושמים את המשקל והחזרות בכל סט. כשכל הסטים מגיעים ליעד החזרות, האפליקציה מציעה להעלות משקל בפעם הבאה. הרישום הוא ק״ג×חזרות.</p></section>`;
+  if (!lifts.length) return head + `<section class="card"><p class="empty">עדיין אין תרגילים. מתחילים מ"+ תרגיל", למשל סקוואט, היפ טראסט או לחיצת כתפיים.</p></section>`;
+  return head + lifts.map(l => {
+    const L = logsOf(l), last = L[L.length - 1], pr = liftPR(l), nx = nextPlan(l);
+    return `<button class="card lift-card" data-act="lift-open" data-id="${l.id}">
+      <div class="lift-top"><div style="min-width:0"><div class="lift-name">${esc(l.name)}</div>
+        <div class="lift-last">${last ? `אחרון ${fmtShort(last.date)}: ${setsText(last)}` : `יעד ${l.sets} סטים של ${l.reps} · עוד לא נרשם אימון`}</div></div>
+        ${pr && pr.w ? `<span class="pr">שיא ${fmt1(pr.w)} ק״ג</span>` : ''}</div>
+      ${spark(l)}
+      ${nx ? `<div class="next ${nx.up ? '' : 'hold'}">${nx.up ? '↑' : '•'} <span>בפעם הבאה: ${nx.text}</span></div>` : ''}
+    </button>`;
+  }).join('');
+}
+function setRow(i, x = {}) {
+  return `<div class="set-row"><span class="n">${i}</span>
+    <input name="w" inputmode="decimal" value="${x.w ?? ''}" placeholder="ק״ג" aria-label="משקל בסט ${i}">
+    <input name="r" inputmode="numeric" value="${x.r ?? ''}" placeholder="חזרות" aria-label="חזרות בסט ${i}">
+    <button type="button" class="icon-btn small" data-act="set-del" aria-label="הסרת סט">${I.x}</button></div>`;
+}
+function openLift(id) {
+  const l = S.lifts.find(x => x.id === id); if (!l) return;
+  const L = logsOf(l), nx = nextPlan(l), last = L[L.length - 1];
+  const pre = Array.from({ length: l.sets || 3 }, () => ({ w: nx ? (nx.w || '') : '', r: nx ? nx.r : (l.reps || 10) }));
+  const hist = [...L].reverse().map(g => {
+    const t = topW(g), vol = g.sets.reduce((a, x) => a + (x.w || 0) * (x.r || 0), 0);
+    return `<div class="log"><div style="min-width:0"><div class="d">${fmtShort(g.date)} <span class="muted small">יום ${DAYS[parseKey(g.date).getDay()]}</span></div>
+      <div class="sets">${setsText(g)}</div>${vol ? `<div class="tiny muted">נפח ${fmt(vol)} ק״ג · שיא באימון <span class="best">${fmt1(t)}</span></div>` : ''}</div>
+      <button type="button" class="icon-btn small" data-act="confirm" data-do="liftlog-del" data-id="${l.id}" data-log="${g.id}" aria-label="מחיקת האימון">${I.x}</button></div>`;
+  }).join('');
+  openSheet(l.name, `<form id="sheetForm" class="form" novalidate>
+    ${nx ? `<div class="next ${nx.up ? '' : 'hold'}">${nx.up ? '↑' : '•'} <span>${nx.text}</span></div>` : ''}
+    <div class="grid2"><label class="field"><span>תאריך</span><input type="date" name="date" id="lf-date" value="${todayKey()}"></label>
+      <div class="field"><span class="field-label">יעד</span><div class="muted" style="padding-top:10px">${l.sets} סטים × ${l.reps} חזרות</div></div></div>
+    <div class="field"><span class="field-label">הסטים של היום</span>
+      <div class="set-head"><span>סט</span><span>ק״ג</span><span>חזרות</span><span></span></div>
+      <div id="setList" class="set-list">${pre.map((x, i) => setRow(i + 1, x)).join('')}</div>
+      <button type="button" class="btn soft small" data-act="set-add">+ סט</button></div>
+    <div class="form-actions"><button class="btn primary" type="submit">שמירת האימון</button>
+      <button type="button" class="btn soft" data-act="lift-edit" data-id="${l.id}">הגדרות תרגיל</button></div>
+    ${L.length > 1 ? `<div class="field"><span class="field-label">התקדמות במשקל</span>${liftChart(l)}</div>` : ''}
+    ${L.length ? `<div class="field"><span class="field-label">היסטוריה</span><div>${hist}</div></div>` : ''}
+  </form>`, (fd, form) => {
+    const sets = $$('.set-row', form).map(r => ({ w: num($('[name=w]', r).value) || 0, r: Math.round(num($('[name=r]', r).value) || 0) })).filter(x => x.r > 0);
+    if (!sets.length) { toast('צריך למלא חזרות לפחות בסט אחד'); return; }
+    l.logs = l.logs || [];
+    l.logs.push({ id: uid(), date: fd.get('date') || todayKey(), sets });
+    const pr = liftPR(l);
+    save(); render(); openLift(l.id);
+    const t = Math.max(...sets.map(x => x.w));
+    toast(pr && t > 0 && t === pr.w && (!last || t > topW(last)) ? `שיא חדש: ${fmt1(t)} ק״ג!` : 'האימון נשמר');
+  });
+}
+function openLiftEdit(l) {
+  const isNew = !l, v = l || { name: '', sets: 3, reps: 10, step: 2.5 };
+  openSheet(isNew ? 'תרגיל חדש' : 'הגדרות תרגיל', `<form id="sheetForm" class="form" novalidate>
+    <label class="field"><span>שם התרגיל</span><input name="name" id="le-name" value="${esc(v.name)}" placeholder="למשל: היפ טראסט" autocomplete="off"></label>
+    <div class="grid2"><label class="field"><span>מספר סטים</span><input name="sets" id="le-sets" inputmode="numeric" value="${v.sets}"></label>
+      <label class="field"><span>יעד חזרות בסט</span><input name="reps" id="le-reps" inputmode="numeric" value="${v.reps}"></label></div>
+    <label class="field"><span>בכמה להעלות משקל (ק״ג)</span><input name="step" id="le-step" inputmode="decimal" value="${v.step}">
+      <span class="hint">במוט נהוג 2.5, במשקולות יד או מכונה לרוב 1 עד 2.</span></label>
+    <div class="form-actions"><button class="btn primary" type="submit">${isNew ? 'הוספה' : 'שמירה'}</button>
+      ${isNew ? '' : `<button type="button" class="btn danger" data-act="confirm" data-do="lift-del" data-id="${v.id}">מחיקת התרגיל</button>`}</div>
+  </form>`, fd => {
+    const name = (fd.get('name') || '').trim();
+    if (!name) { toast('צריך לתת שם לתרגיל'); return; }
+    const data = { name, sets: Math.max(1, Math.min(12, parseInt(fd.get('sets'), 10) || 3)), reps: Math.max(1, Math.min(100, parseInt(fd.get('reps'), 10) || 10)), step: Math.max(0.25, Math.min(20, num(fd.get('step')) || 2.5)) };
+    if (l) { Object.assign(l, data); save(); render(); openLift(l.id); toast('נשמר'); }
+    else { const n = { id: uid(), ...data, logs: [] }; S.lifts.push(n); save(); render(); openLift(n.id); }
+  });
+}
+
 function favsCard() {
   const list = S.favs.length ? `<ul class="items">${S.favs.map(f => `<li class="item">
       <button class="body" data-act="fav-edit" data-id="${f.id}"><span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span>
@@ -722,8 +856,8 @@ function vGoal() {
 }
 
 /* ---------- רינדור ---------- */
-const TITLES = { today: 'היום', train: 'אימונים', food: 'תזונה', body: 'מדדים', goal: 'אתגר' };
-const VIEWS = { today: vToday, train: vTrain, food: vFood, body: vBody, goal: vGoal };
+const TITLES = { today: 'היום', train: 'אימונים', lift: 'מעקב כוח', food: 'תזונה', body: 'מדדים', goal: 'אתגר' };
+const VIEWS = { today: vToday, train: vTrain, lift: vLift, food: vFood, body: vBody, goal: vGoal };
 function render() {
   if (!VIEWS[U.tab]) U.tab = 'today';
   $('#view').innerHTML = VIEWS[U.tab]();
@@ -997,6 +1131,8 @@ async function doAction(what, ds) {
     case 'wo-del': S.workouts = S.workouts.filter(w => w.id !== ds.id); save(); closeSheet(); render(); toast('האימון נמחק'); break;
     case 'meal-del': S.meals = S.meals.filter(m => m.id !== ds.id); save(); closeSheet(); render(); toast('הארוחה נמחקה'); break;
     case 'fav-del': S.favs = S.favs.filter(f => f.id !== ds.id); save(); render(); toast('הוסר מהמועדפות'); break;
+    case 'lift-del': S.lifts = S.lifts.filter(l => l.id !== ds.id); save(); closeSheet(); render(); toast('התרגיל נמחק'); break;
+    case 'liftlog-del': { const l = S.lifts.find(x => x.id === ds.id); if (l) { l.logs = l.logs.filter(g => g.id !== ds.log); save(); render(); openLift(l.id); toast('האימון נמחק'); } break; }
     case 'tpl-del': S.templates = S.templates.filter(t => t.id !== ds.id); save(); render(); toast('התבנית נמחקה'); break;
     case 'ch-archive': if (c) { c.archived = true; save(); render(); toast('האתגר נשמר בהיסטוריה'); } break;
     case 'ch-del': if (c) { S.challenges = S.challenges.filter(x => x !== c); save(); render(); toast('האתגר נמחק'); } break;
@@ -1049,6 +1185,15 @@ document.addEventListener('click', e => {
     case 'ch-edit': { const c = activeCh(); if (c) openChallenge(c); break; }
     case 'ch-archive': doAction('ch-archive', ds); break;
     case 'wo-new': openWorkout(null, ds.date || U.date); break;
+    case 'lift-new': openLiftEdit(null); break;
+    case 'lift-open': openLift(ds.id); break;
+    case 'lift-edit': { const l = S.lifts.find(x => x.id === ds.id); if (l) openLiftEdit(l); break; }
+    case 'set-add': {
+      const rows = $$('#setList .set-row'), lastRow = rows[rows.length - 1];
+      const w = lastRow ? $('[name=w]', lastRow).value : '', r = lastRow ? $('[name=r]', lastRow).value : '';
+      $('#setList').insertAdjacentHTML('beforeend', setRow(rows.length + 1, { w, r })); break;
+    }
+    case 'set-del': { el.closest('.set-row').remove(); $$('#setList .set-row .n').forEach((n, i) => { n.textContent = i + 1; }); break; }
     case 'wo-edit': { const w = S.workouts.find(x => x.id === ds.id); if (w) openWorkout(w); break; }
     case 'wo-toggle': { const w = S.workouts.find(x => x.id === ds.id); if (w) { w.done = !w.done; save(); render(); } break; }
     case 'tpl-use': {
