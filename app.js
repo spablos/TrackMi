@@ -124,6 +124,46 @@ function autoDone(kind, k) {
   if (kind === 'kcal') { const e = mealsOn(k).filter(m => m.eaten); return e.length > 0 && sumMeals(e).kcal <= st.kcal; }
   return false;
 }
+/* ---------- רצפים ליעדים הכלליים ---------- */
+const STREAKS = [
+  { kind: 'water', name: 'מים', icon: () => I.drop, color: 'var(--water)' },
+  { kind: 'sleep', name: 'שינה', icon: () => I.moon, color: 'var(--sleep)' },
+  { kind: 'steps', name: 'צעדים', icon: () => I.steps, color: 'var(--steps)' },
+  { kind: 'kcal', name: 'קלוריות', icon: () => I.food, color: 'var(--food)' },
+  { kind: 'protein', name: 'חלבון', icon: () => I.food, color: 'var(--food)' },
+  { kind: 'workout', name: 'אימון', icon: () => I.train, color: 'var(--train)' },
+];
+function goalMet(kind, k) {
+  if (kind === 'protein') { const e = mealsOn(k).filter(m => m.eaten); return e.length > 0 && sumMeals(e).protein >= S.settings.protein; }
+  return autoDone(kind, k);
+}
+/* רצף נוכחי: ימים רצופים שעמדו ביעד עד היום. אם היום עוד לא הושלם, הרצף נספר עד אתמול ולא נשבר. */
+function streakInfo(kind, ref = todayKey()) {
+  const metToday = goalMet(kind, ref);
+  let cur = 0, k = metToday ? ref : addDays(ref, -1);
+  while (cur < 1000 && goalMet(kind, k)) { cur++; k = addDays(k, -1); }
+  const keys = Object.keys(S.days).concat(S.meals.map(m => m.date), S.workouts.map(w => w.date)).filter(x => x <= ref).sort();
+  let best = cur;
+  if (keys.length) {
+    let run = 0;
+    for (let d = keys[0]; d <= ref; d = addDays(d, 1)) { if (goalMet(kind, d)) { run++; if (run > best) best = run; } else run = 0; }
+  }
+  return { cur, best, metToday };
+}
+function streaksCard() {
+  const items = STREAKS.map(x => ({ ...x, ...streakInfo(x.kind) }));
+  return `<section class="card streaks">
+    <div class="card-head"><h2 class="card-title">רצפים</h2><span class="muted tiny">ימים ברצף שעמדת ביעד</span></div>
+    <div class="streak-grid">${items.map(x => `<div class="streak ${x.metToday ? 'met' : ''} ${x.cur ? '' : 'zero'}" style="--c:${x.color}">
+      <span class="streak-ico">${x.icon()}</span>
+      <span class="streak-num">${x.cur}</span>
+      <span class="streak-name">${x.name}</span>
+      <span class="streak-sub">${x.metToday ? 'היום הושלם' : x.cur ? 'היום עוד לא' : 'מתחילים היום'}${x.best > x.cur ? ` · שיא ${x.best}` : x.cur > 1 ? ' · שיא!' : ''}</span>
+    </div>`).join('')}</div>
+    <p class="tiny muted">היעדים נקבעים בהגדרות. קלוריות נספרות כשהארוחות שסומנו כ"נאכל" לא עוברות את היעד, וחלבון כשמגיעים ליעד החלבון.</p>
+  </section>`;
+}
+
 const taskDone = (c, k, t) => (c.checks[k] || []).includes(t.id) || (!!t.auto && autoDone(t.auto, k));
 function dayStatus(c, k, ref = todayKey()) {
   if (k < c.start || k > chEnd(c)) return 'out';
@@ -336,6 +376,7 @@ function vToday() {
   </div>
   ${isToday ? '' : '<button class="link-btn" data-act="date-today">חזרה להיום</button>'}
   ${challengeCard(k)}
+  ${isToday ? streaksCard() : ''}
   ${waterCard(k)}
   <div class="grid2">${sleepCard(k)}${weightCard(k)}</div>
   ${stepsCard(k)}
