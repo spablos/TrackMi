@@ -340,10 +340,24 @@ function macroRow(name, v, goal) {
   const p = goal ? Math.min(100, (v / goal) * 100) : 0;
   return `<div class="macro"><span>${name}</span><div class="progress"><span style="width:${p}%"></span></div><span class="v">${fmt(v)}/${fmt(goal)} ג׳</span></div>`;
 }
+/* רכיבי ארוחה עם גרמים: [{ name, g }] */
+const itemsText = items => (items || []).filter(x => x.name).map(x => (x.g ? `${esc(x.name)} <b class="g">${fmt(x.g)} ג׳</b>` : esc(x.name))).join(' · ');
+function compRow(x = {}) {
+  return `<div class="comp-row"><input name="cName" value="${esc(x.name || '')}" placeholder="רכיב, למשל אורז" aria-label="רכיב" autocomplete="off">
+    <input name="cG" inputmode="decimal" value="${x.g || ''}" placeholder="גרם" aria-label="גרם">
+    <button type="button" class="icon-btn small" data-act="row-del" aria-label="הסרת הרכיב">${I.x}</button></div>`;
+}
+const compEditor = items => `<div class="field"><span class="field-label">כמה גרם מכל דבר</span>
+  <div id="compList" class="comp-list">${(items && items.length ? items : [{}]).map(compRow).join('')}</div>
+  <button type="button" class="btn soft small" data-act="comp-add">+ רכיב</button></div>`;
+const readComps = form => $$('.comp-row', form).map(r => ({ name: $('[name=cName]', r).value.trim(), g: num($('[name=cG]', r).value) || 0 })).filter(x => x.name);
+const fillComps = items => { $('#compList').innerHTML = (items && items.length ? items : [{}]).map(compRow).join(''); };
+
 function mealItem(m) {
   return `<li class="item ${m.eaten ? 'done' : ''}">
     <button class="tick" role="checkbox" aria-checked="${!!m.eaten}" data-act="meal-toggle" data-id="${m.id}" aria-label="נאכל: ${esc(m.name)}"><span class="check-box">${I.check}</span></button>
     <button class="body" data-act="meal-edit" data-id="${m.id}"><span class="slot-tag">${esc(m.slot)}</span><span class="t">${esc(m.name)}</span>
+      ${m.items && m.items.length ? `<span class="comps">${itemsText(m.items)}</span>` : ''}
       ${m.protein || m.carbs || m.fat ? `<span class="s">ח׳ ${fmt(m.protein)} · פ׳ ${fmt(m.carbs)} · ש׳ ${fmt(m.fat)}</span>` : ''}</button>
     <span class="side">${fmt(m.kcal)}</span></li>`;
 }
@@ -587,6 +601,7 @@ function openLiftEdit(l, presetName = '') {
 function favsCard() {
   const list = S.favs.length ? `<ul class="items">${S.favs.map(f => `<li class="item">
       <button class="body" data-act="fav-edit" data-id="${f.id}"><span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span>
+        ${f.items && f.items.length ? `<span class="comps">${itemsText(f.items)}</span>` : ''}
         <span class="s">${fmt(f.kcal)} קק״ל · ח׳ ${fmt(f.protein)} · פ׳ ${fmt(f.carbs)} · ש׳ ${fmt(f.fat)}</span></button>
       <button class="icon-btn small" data-act="confirm" data-do="fav-del" data-id="${f.id}" aria-label="הסרה מהמועדפות">${I.x}</button></li>`).join('')}</ul>`
     : '<p class="empty">ארוחה שאוכלים הרבה שומרים פה פעם אחת, ואחר כך מוסיפים אותה לכל יום בהקשה, בלי למלא שוב את הפרטים.</p>';
@@ -597,12 +612,12 @@ function favPicker(date) {
   openSheet(`הוספה ממועדפות · ${fmtShort(date)}`, `<div class="form">
     <p class="small muted">הקשה מוסיפה את הארוחה ליום ${esc(DAYS[parseKey(date).getDay()])}. אפשר להוסיף כמה ברצף.</p>
     <ul class="items">${S.favs.map(f => `<li class="item"><button class="body" data-act="fav-add" data-id="${f.id}" data-date="${date}">
-      <span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span><span class="s">ח׳ ${fmt(f.protein)} · פ׳ ${fmt(f.carbs)} · ש׳ ${fmt(f.fat)}</span></button>
+      <span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span>${f.items && f.items.length ? `<span class="comps">${itemsText(f.items)}</span>` : ''}<span class="s">ח׳ ${fmt(f.protein)} · פ׳ ${fmt(f.carbs)} · ש׳ ${fmt(f.fat)}</span></button>
       <span class="side">${fmt(f.kcal)}</span></li>`).join('')}</ul>
     <button class="btn soft" data-act="meal-new" data-date="${date}">ארוחה אחרת</button></div>`);
 }
 function favFrom(src) {
-  return { name: src.name, slot: src.slot, kcal: src.kcal || 0, protein: src.protein || 0, carbs: src.carbs || 0, fat: src.fat || 0 };
+  return { name: src.name, slot: src.slot, kcal: src.kcal || 0, protein: src.protein || 0, carbs: src.carbs || 0, fat: src.fat || 0, items: clone(src.items || []) };
 }
 function upsertFav(data) {
   const i = S.favs.findIndex(f => f.name === data.name);
@@ -613,6 +628,7 @@ function openFav(f) {
   openSheet(isNew ? 'ארוחה מועדפת חדשה' : 'עריכת ארוחה מועדפת', `<form id="sheetForm" class="form" novalidate>
     <label class="field"><span>שם הארוחה</span><input name="name" id="ff-name" value="${esc(v.name)}" placeholder="למשל: טוסט גבינה וירקות" autocomplete="off"></label>
     <div class="field"><span class="field-label">ארוחה רגילה</span><div class="chips">${SLOTS.map(s => `<label class="chip"><input type="radio" name="slot" value="${s}" ${s === v.slot ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div></div>
+    ${compEditor(v.items)}
     <div class="macro-inputs">
       <label class="field"><span>קלוריות</span><input name="kcal" id="ff-kcal" inputmode="numeric" value="${v.kcal ?? ''}" placeholder="0"></label>
       <label class="field"><span>חלבון ג׳</span><input name="protein" id="ff-p" inputmode="decimal" value="${v.protein ?? ''}" placeholder="0"></label>
@@ -623,7 +639,7 @@ function openFav(f) {
   </form>`, fd => {
     const name = (fd.get('name') || '').trim();
     if (!name) { toast('צריך לתת שם לארוחה'); return; }
-    const data = { name, slot: fd.get('slot') || 'בוקר', kcal: num(fd.get('kcal')) || 0, protein: num(fd.get('protein')) || 0, carbs: num(fd.get('carbs')) || 0, fat: num(fd.get('fat')) || 0 };
+    const data = { name, slot: fd.get('slot') || 'בוקר', kcal: num(fd.get('kcal')) || 0, protein: num(fd.get('protein')) || 0, carbs: num(fd.get('carbs')) || 0, fat: num(fd.get('fat')) || 0, items: readComps($('#sheetForm')) };
     if (f) Object.assign(f, data); else upsertFav(data);
     save(); closeSheet(); render(); toast('נשמר במועדפות');
   });
@@ -945,6 +961,7 @@ function openMeal(m, date) {
       ${S.foods.length ? '<span class="hint">מזונות שהזנת בעבר מופיעים בהשלמה ומתמלאים לבד.</span>' : ''}</label>
     <div class="field"><span class="field-label">ארוחה</span><div class="chips">${SLOTS.map(s => `<label class="chip"><input type="radio" name="slot" value="${s}" ${s === v.slot ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div></div>
     <label class="field"><span>תאריך</span><input type="date" name="date" id="mf-date" value="${v.date}"></label>
+    ${compEditor(v.items)}
     <div class="macro-inputs">
       <label class="field"><span>קלוריות</span><input name="kcal" id="mf-kcal" inputmode="numeric" value="${v.kcal ?? ''}" placeholder="0"></label>
       <label class="field"><span>חלבון ג׳</span><input name="protein" id="mf-p" inputmode="decimal" value="${v.protein ?? ''}" placeholder="0"></label>
@@ -961,10 +978,10 @@ function openMeal(m, date) {
     const data = {
       name, slot: fd.get('slot') || 'ביניים', date: fd.get('date') || date || todayKey(),
       kcal: num(fd.get('kcal')) || 0, protein: num(fd.get('protein')) || 0, carbs: num(fd.get('carbs')) || 0, fat: num(fd.get('fat')) || 0,
-      eaten: !!fd.get('eaten'),
+      items: readComps($('#sheetForm')), eaten: !!fd.get('eaten'),
     };
     if (isNew) S.meals.push({ id: uid(), ...data }); else Object.assign(m, data);
-    const f = { name, kcal: data.kcal, protein: data.protein, carbs: data.carbs, fat: data.fat };
+    const f = { name, kcal: data.kcal, protein: data.protein, carbs: data.carbs, fat: data.fat, items: clone(data.items) };
     const i = S.foods.findIndex(x => x.name === name);
     if (i >= 0) S.foods.splice(i, 1);
     S.foods.unshift(f);
@@ -1204,6 +1221,7 @@ document.addEventListener('click', e => {
       const f = S.favs.find(x => x.id === ds.id); if (!f) break;
       $('#mf-name').value = f.name; $('#mf-kcal').value = f.kcal || ''; $('#mf-p').value = f.protein || ''; $('#mf-c').value = f.carbs || ''; $('#mf-f').value = f.fat || '';
       $$('#sheetForm input[name=slot]').forEach(r => { r.checked = r.value === f.slot; });
+      fillComps(f.items);
       $('#mf-fav').checked = true; break;
     }
     case 'meal-edit': { const m = S.meals.find(x => x.id === ds.id); if (m) openMeal(m); break; }
@@ -1211,7 +1229,8 @@ document.addEventListener('click', e => {
     case 'copy-week': copyWeek(ds.what); break;
     case 'ex-add': { $('#exList').insertAdjacentHTML('beforeend', exRow()); const rows = $$('#exList .exn'); rows[rows.length - 1].focus(); break; }
     case 'task-add': { $('#taskList').insertAdjacentHTML('beforeend', taskRow()); const rows = $$('#taskList input'); rows[rows.length - 1].focus(); break; }
-    case 'row-del': el.closest('.ex-row, .task-row').remove(); break;
+    case 'row-del': el.closest('.ex-row, .task-row, .comp-row').remove(); break;
+    case 'comp-add': { $('#compList').insertAdjacentHTML('beforeend', compRow()); const r = $$('#compList [name=cName]'); r[r.length - 1].focus(); break; }
     case 'len': $('#cf-len').value = ds.v; break;
     case 'settings': openSettings(); break;
     case 'export': exportData(); break;
@@ -1248,6 +1267,7 @@ document.addEventListener('change', e => {
   } else if (t.id === 'mf-name') {
     const f = S.foods.find(x => x.name === t.value.trim()); if (!f) return;
     $('#mf-kcal').value = f.kcal || ''; $('#mf-p').value = f.protein || ''; $('#mf-c').value = f.carbs || ''; $('#mf-f').value = f.fat || '';
+    if (f.items && f.items.length && !readComps($('#sheetForm')).length) fillComps(f.items);
   } else if (t.id === 'photoInput') {
     const file = t.files && t.files[0]; t.value = ''; addPhoto(file);
   } else if (t.id === 'importInput') {

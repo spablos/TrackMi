@@ -517,3 +517,14 @@ p { margin: 0; }
 .lift-entry { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lift-entry .field:last-child { grid-column: 1 / -1; }
 .lift-entry input#lf-w, .lift-entry input#lf-r { font-family: var(--font-display); font-size: 24px; text-align: center; padding: 8px; }
+
+/* Meal components with grams */
+.comp-list { display: flex; flex-direction: column; gap: 6px; }
+.comp-row { display: grid; grid-template-columns: 1fr 84px 34px; gap: 6px; align-items: center; }
+.comp-row input {
+  width: 100%; min-width: 0; font-size: 16px; padding: 10px 11px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink);
+}
+.comp-row input[name=cG] { text-align: center; }
+.item .comps { font-size: 13.5px; color: var(--ink); line-height: 1.4; overflow-wrap: anywhere; }
+.item .comps .g { color: var(--food); font-weight: 800; white-space: nowrap; }
