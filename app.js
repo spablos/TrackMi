@@ -49,6 +49,7 @@ const I = {
   food: svg('<path d="M3.5 12h17a8.5 8.5 0 0 1-17 0z"/><path d="M9 8.5c0-1.6 1.6-1.9 1.6-3.5M13.5 8.5c0-1.6 1.6-1.9 1.6-3.5"/>'),
   train: svg('<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>'),
   steps: svg('<path d="M8.5 3.5c1.9 0 2.8 2 2.6 4.5-.2 2.3-1 3.7-2.6 3.7S6 10.3 5.9 8c-.1-2.5.7-4.5 2.6-4.5zM6.3 14h4.6c.1 2.9-.6 4.6-2.3 4.6s-2.4-1.7-2.3-4.6zM15.5 7.5c1.9 0 2.7 2 2.6 4.5-.1 2.3-1 3.7-2.6 3.7s-2.5-1.4-2.6-3.7c-.1-2.5.7-4.5 2.6-4.5zM13.3 18h4.6c.1 2.9-.6 4.6-2.3 4.6S13.2 20.9 13.3 18z"/>'),
+  star: svg('<path d="M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/>', 'i sm'),
   camera: svg('<path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13.2" r="3.3"/>'),
   flag: svg('<path d="M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12"/>'),
   cup: svg('<path d="M6 4h12l-1.6 15.2a1 1 0 0 1-1 .8H8.6a1 1 0 0 1-1-.8z"/>'),
@@ -68,6 +69,7 @@ const DEFAULTS = {
   workouts: [],    // { id, date, title, type, duration, exercises:[{name,sets,reps,weight}], notes, done }
   templates: [],   // { id, title, type, duration, exercises }
   meals: [],       // { id, date, slot, name, kcal, protein, carbs, fat, eaten }
+  favs: [],        // ארוחות מועדפות { id, name, slot, kcal, protein, carbs, fat }
   foods: [],       // ספריית מזונות לבחירה מהירה { name, kcal, protein, carbs, fat }
   challenges: [],  // { id, title, start, length, tasks:[{id,text,auto}], checks:{date:[taskId]}, archived }
 };
@@ -352,7 +354,8 @@ function foodDayCard(k) {
     <div class="kcal-row">${kcalRing(eaten.kcal, st.kcal)}
       <div class="macros">${macroRow('חלבון', eaten.protein, st.protein)}${macroRow('פחמימה', eaten.carbs, st.carbs)}${macroRow('שומן', eaten.fat, st.fat)}</div></div>
     ${list.length ? `<ul class="items">${list.map(mealItem).join('')}</ul>` : '<p class="empty">אין ארוחות מתוכננות ליום הזה.</p>'}
-    <button class="add-btn" data-act="meal-new" data-date="${k}">+ הוספת ארוחה</button>
+    <div class="add-pair"><button class="add-btn" data-act="meal-new" data-date="${k}">+ הוספת ארוחה</button>
+      ${S.favs.length ? `<button class="add-btn fav" data-act="fav-pick" data-date="${k}">${I.star} ממועדפות</button>` : ''}</div>
   </section>`;
 }
 function trainDayCard(k) {
@@ -435,7 +438,8 @@ function vFood() {
     return `<div class="day-block">${dayHead(k, `<span class="k ${over ? 'over' : ''}">${fmt(t.kcal)} / ${fmt(st.kcal)}</span>`)}
       <div class="progress food ${over ? 'over' : ''}"><span style="width:${Math.min(100, (t.kcal / st.kcal) * 100)}%"></span></div>
       ${ms.length ? `<ul class="items">${ms.map(mealItem).join('')}</ul>` : ''}
-      <button class="inline-add" data-act="meal-new" data-date="${k}">+ ארוחה</button></div>`;
+      <div class="row"><button class="inline-add" data-act="meal-new" data-date="${k}">+ ארוחה</button>
+        ${S.favs.length ? `<button class="inline-add" data-act="fav-pick" data-date="${k}">${I.star} ממועדפות</button>` : ''}</div></div>`;
   }).join('');
   return `${weekNav()}
   <section class="card food">
@@ -447,7 +451,53 @@ function vFood() {
     <p class="tiny muted">היעד היומי: ${fmt(st.kcal)} קק״ל · חלבון ${fmt(st.protein)} ג׳ · פחמימה ${fmt(st.carbs)} ג׳ · שומן ${fmt(st.fat)} ג׳. אפשר לשנות בהגדרות.</p>
     <div class="row"><button class="btn soft small" data-act="copy-week" data-what="meals">${I.copy} העתקת התפריט מהשבוע הקודם</button></div>
   </section>
-  <section class="card">${days}</section>`;
+  <section class="card">${days}</section>
+  ${favsCard()}`;
+}
+
+function favsCard() {
+  const list = S.favs.length ? `<ul class="items">${S.favs.map(f => `<li class="item">
+      <button class="body" data-act="fav-edit" data-id="${f.id}"><span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span>
+        <span class="s">${fmt(f.kcal)} קק״ל · ח׳ ${fmt(f.protein)} · פ׳ ${fmt(f.carbs)} · ש׳ ${fmt(f.fat)}</span></button>
+      <button class="icon-btn small" data-act="confirm" data-do="fav-del" data-id="${f.id}" aria-label="הסרה מהמועדפות">${I.x}</button></li>`).join('')}</ul>`
+    : '<p class="empty">ארוחה שאוכלים הרבה שומרים פה פעם אחת, ואחר כך מוסיפים אותה לכל יום בהקשה, בלי למלא שוב את הפרטים.</p>';
+  return `<section class="card food"><div class="card-head"><h2 class="card-title">${I.star} ארוחות מועדפות</h2>
+    <button class="btn soft small" data-act="fav-new">+ מועדפת</button></div>${list}</section>`;
+}
+function favPicker(date) {
+  openSheet(`הוספה ממועדפות · ${fmtShort(date)}`, `<div class="form">
+    <p class="small muted">הקשה מוסיפה את הארוחה ליום ${esc(DAYS[parseKey(date).getDay()])}. אפשר להוסיף כמה ברצף.</p>
+    <ul class="items">${S.favs.map(f => `<li class="item"><button class="body" data-act="fav-add" data-id="${f.id}" data-date="${date}">
+      <span class="slot-tag">${esc(f.slot)}</span><span class="t">${esc(f.name)}</span><span class="s">ח׳ ${fmt(f.protein)} · פ׳ ${fmt(f.carbs)} · ש׳ ${fmt(f.fat)}</span></button>
+      <span class="side">${fmt(f.kcal)}</span></li>`).join('')}</ul>
+    <button class="btn soft" data-act="meal-new" data-date="${date}">ארוחה אחרת</button></div>`);
+}
+function favFrom(src) {
+  return { name: src.name, slot: src.slot, kcal: src.kcal || 0, protein: src.protein || 0, carbs: src.carbs || 0, fat: src.fat || 0 };
+}
+function upsertFav(data) {
+  const i = S.favs.findIndex(f => f.name === data.name);
+  if (i >= 0) Object.assign(S.favs[i], favFrom(data)); else S.favs.push({ id: uid(), ...favFrom(data) });
+}
+function openFav(f) {
+  const isNew = !f, v = f || { name: '', slot: 'בוקר', kcal: '', protein: '', carbs: '', fat: '' };
+  openSheet(isNew ? 'ארוחה מועדפת חדשה' : 'עריכת ארוחה מועדפת', `<form id="sheetForm" class="form" novalidate>
+    <label class="field"><span>שם הארוחה</span><input name="name" id="ff-name" value="${esc(v.name)}" placeholder="למשל: טוסט גבינה וירקות" autocomplete="off"></label>
+    <div class="field"><span class="field-label">ארוחה רגילה</span><div class="chips">${SLOTS.map(s => `<label class="chip"><input type="radio" name="slot" value="${s}" ${s === v.slot ? 'checked' : ''}><span>${s}</span></label>`).join('')}</div></div>
+    <div class="macro-inputs">
+      <label class="field"><span>קלוריות</span><input name="kcal" id="ff-kcal" inputmode="numeric" value="${v.kcal ?? ''}" placeholder="0"></label>
+      <label class="field"><span>חלבון ג׳</span><input name="protein" id="ff-p" inputmode="decimal" value="${v.protein ?? ''}" placeholder="0"></label>
+      <label class="field"><span>פחמימה ג׳</span><input name="carbs" id="ff-c" inputmode="decimal" value="${v.carbs ?? ''}" placeholder="0"></label>
+      <label class="field"><span>שומן ג׳</span><input name="fat" id="ff-f" inputmode="decimal" value="${v.fat ?? ''}" placeholder="0"></label>
+    </div>
+    <div class="form-actions"><button class="btn primary" type="submit">שמירה</button></div>
+  </form>`, fd => {
+    const name = (fd.get('name') || '').trim();
+    if (!name) { toast('צריך לתת שם לארוחה'); return; }
+    const data = { name, slot: fd.get('slot') || 'בוקר', kcal: num(fd.get('kcal')) || 0, protein: num(fd.get('protein')) || 0, carbs: num(fd.get('carbs')) || 0, fat: num(fd.get('fat')) || 0 };
+    if (f) Object.assign(f, data); else upsertFav(data);
+    save(); closeSheet(); render(); toast('נשמר במועדפות');
+  });
 }
 
 /* ---------- גרפים ---------- */
@@ -756,7 +806,11 @@ function openMeal(m, date) {
   const hour = new Date().getHours();
   const guess = hour < 10 ? 'בוקר' : hour < 12 ? 'ביניים' : hour < 16 ? 'צהריים' : hour < 21 ? 'ערב' : 'נשנוש';
   const v = m || { date, slot: guess, name: '', kcal: '', protein: '', carbs: '', fat: '', eaten: date <= todayKey() && date === todayKey() };
+  const isFav = !!S.favs.find(f => f.name === v.name);
+  const favChips = isNew && S.favs.length ? `<div class="field"><span class="field-label">${I.star} ממועדפות</span>
+    <div class="chips">${S.favs.map(f => `<button type="button" class="btn soft small" data-act="fav-fill" data-id="${f.id}">${esc(f.name)}</button>`).join('')}</div></div>` : '';
   openSheet(isNew ? 'ארוחה חדשה' : 'עריכת ארוחה', `<form id="sheetForm" class="form" novalidate>
+    ${favChips}
     <label class="field"><span>מה אוכלים</span><input name="name" id="mf-name" list="foodList" value="${esc(v.name)}" placeholder="למשל: יוגורט חלבון עם גרנולה" autocomplete="off">
       <datalist id="foodList">${S.foods.map(f => `<option value="${esc(f.name)}"></option>`).join('')}</datalist>
       ${S.foods.length ? '<span class="hint">מזונות שהזנת בעבר מופיעים בהשלמה ומתמלאים לבד.</span>' : ''}</label>
@@ -769,6 +823,7 @@ function openMeal(m, date) {
       <label class="field"><span>שומן ג׳</span><input name="fat" id="mf-f" inputmode="decimal" value="${v.fat ?? ''}" placeholder="0"></label>
     </div>
     <label class="check-line"><input type="checkbox" name="eaten" id="mf-eaten" ${v.eaten ? 'checked' : ''}> כבר נאכל</label>
+    <label class="check-line"><input type="checkbox" name="fav" id="mf-fav" ${isFav ? 'checked' : ''}> שמירה בארוחות המועדפות</label>
     <div class="form-actions"><button class="btn primary" type="submit">${isNew ? 'הוספה' : 'שמירה'}</button>
       ${isNew ? '' : `<button type="button" class="btn danger" data-act="confirm" data-do="meal-del" data-id="${v.id}">מחיקה</button>`}</div>
   </form>`, fd => {
@@ -785,6 +840,8 @@ function openMeal(m, date) {
     if (i >= 0) S.foods.splice(i, 1);
     S.foods.unshift(f);
     if (S.foods.length > 300) S.foods.length = 300;
+    if (fd.get('fav')) upsertFav(data);
+    else if (isFav) S.favs = S.favs.filter(x => x.name !== name);
     save(); closeSheet(); render(); toast(isNew ? 'הארוחה נוספה' : 'נשמר');
   });
 }
@@ -939,6 +996,7 @@ async function doAction(what, ds) {
   switch (what) {
     case 'wo-del': S.workouts = S.workouts.filter(w => w.id !== ds.id); save(); closeSheet(); render(); toast('האימון נמחק'); break;
     case 'meal-del': S.meals = S.meals.filter(m => m.id !== ds.id); save(); closeSheet(); render(); toast('הארוחה נמחקה'); break;
+    case 'fav-del': S.favs = S.favs.filter(f => f.id !== ds.id); save(); render(); toast('הוסר מהמועדפות'); break;
     case 'tpl-del': S.templates = S.templates.filter(t => t.id !== ds.id); save(); render(); toast('התבנית נמחקה'); break;
     case 'ch-archive': if (c) { c.archived = true; save(); render(); toast('האתגר נשמר בהיסטוריה'); } break;
     case 'ch-del': if (c) { S.challenges = S.challenges.filter(x => x !== c); save(); render(); toast('האתגר נמחק'); } break;
@@ -999,6 +1057,20 @@ document.addEventListener('click', e => {
       save(); render(); toast(`"${t.title}" נוסף להיום`); break;
     }
     case 'meal-new': openMeal(null, ds.date || U.date); break;
+    case 'fav-pick': favPicker(ds.date || U.date); break;
+    case 'fav-new': openFav(null); break;
+    case 'fav-edit': { const f = S.favs.find(x => x.id === ds.id); if (f) openFav(f); break; }
+    case 'fav-add': {
+      const f = S.favs.find(x => x.id === ds.id); if (!f) break;
+      S.meals.push({ id: uid(), date: ds.date, ...favFrom(f), eaten: false });
+      save(); render(); toast(`"${f.name}" נוסף ל${fmtShort(ds.date)}`); break;
+    }
+    case 'fav-fill': {
+      const f = S.favs.find(x => x.id === ds.id); if (!f) break;
+      $('#mf-name').value = f.name; $('#mf-kcal').value = f.kcal || ''; $('#mf-p').value = f.protein || ''; $('#mf-c').value = f.carbs || ''; $('#mf-f').value = f.fat || '';
+      $$('#sheetForm input[name=slot]').forEach(r => { r.checked = r.value === f.slot; });
+      $('#mf-fav').checked = true; break;
+    }
     case 'meal-edit': { const m = S.meals.find(x => x.id === ds.id); if (m) openMeal(m); break; }
     case 'meal-toggle': { const m = S.meals.find(x => x.id === ds.id); if (m) { m.eaten = !m.eaten; save(); render(); } break; }
     case 'copy-week': copyWeek(ds.what); break;

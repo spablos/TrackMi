@@ -486,3 +486,12 @@ p { margin: 0; }
 .streak.zero .streak-num { color: var(--muted); }
 .streak-name { font-weight: 800; font-size: 14px; }
 .streak-sub { font-size: 11.5px; color: var(--muted); font-weight: 600; line-height: 1.3; }
+
+/* Favorite meals */
+.add-pair { display: flex; gap: 8px; }
+.add-pair .add-btn { flex: 1; }
+.add-btn.fav, .inline-add { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.add-btn.fav svg.i, .inline-add svg.i, .field-label svg.i { color: var(--food); width: 16px; height: 16px; }
+.field-label { display: inline-flex; align-items: center; gap: 4px; }
+.food .card-title svg.i.sm { color: var(--food); }
+.sheet:not([hidden]) ~ .toast { bottom: auto; top: calc(14px + env(safe-area-inset-top, 0px)); }
