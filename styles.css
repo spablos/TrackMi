@@ -18,6 +18,8 @@
   --food-soft: #FAEAD3;
   --train: #CF4637;
   --train-soft: #F7DDD9;
+  --steps: #B4498F;
+  --steps-soft: #F5DDEC;
   --good: #1D8A4D;
   --warn: #B9770C;
   --bad: #BF3F2E;
@@ -32,7 +34,7 @@
     --bg: #0F1613; --surface: #17211D; --surface-2: #1E2A25; --ink: #E6EFEA; --muted: #98A9A1; --line: #29372F;
     --accent: #3DBFA8; --accent-ink: #052019; --accent-soft: #15382F;
     --water: #63A6F2; --water-soft: #16304D; --sleep: #9E8EF2; --sleep-soft: #29244D;
-    --food: #F2A64C; --food-soft: #3B2B15; --train: #F27D6F; --train-soft: #42221E;
+    --food: #F2A64C; --food-soft: #3B2B15; --train: #F27D6F; --train-soft: #42221E; --steps: #EB86C7; --steps-soft: #43213A;
     --good: #4CC27F; --warn: #E9AE47; --bad: #F07967;
     --shadow: none;
     color-scheme: dark;
@@ -42,7 +44,7 @@
   --bg: #0F1613; --surface: #17211D; --surface-2: #1E2A25; --ink: #E6EFEA; --muted: #98A9A1; --line: #29372F;
   --accent: #3DBFA8; --accent-ink: #052019; --accent-soft: #15382F;
   --water: #63A6F2; --water-soft: #16304D; --sleep: #9E8EF2; --sleep-soft: #29244D;
-  --food: #F2A64C; --food-soft: #3B2B15; --train: #F27D6F; --train-soft: #42221E;
+  --food: #F2A64C; --food-soft: #3B2B15; --train: #F27D6F; --train-soft: #42221E; --steps: #EB86C7; --steps-soft: #43213A;
   --good: #4CC27F; --warn: #E9AE47; --bad: #F07967;
   --shadow: none;
   color-scheme: dark;
@@ -453,3 +455,19 @@ p { margin: 0; }
 }
 .ltr { direction: ltr; unicode-bidi: isolate; }
 .stat b { direction: ltr; unicode-bidi: isolate; }
+
+/* Water pace and steps */
+.cup.due { background: transparent; box-shadow: inset 0 0 0 2px var(--water); }
+.pace { font-size: 14px; font-weight: 700; color: var(--muted); }
+.pace.ok { color: var(--good); }
+.pace.behind { color: var(--warn); }
+.steps .card-title svg.i { color: var(--steps); }
+.steps-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.steps-row input {
+  width: 9.5em; max-width: 100%; text-align: center;
+  font-family: var(--font-display); font-size: 24px; padding: 6px 8px;
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-sm); color: var(--ink);
+}
+.steps-row span { flex: 1; min-width: 0; }
+.progress.steps-bar span { background: var(--steps); }
+.chart .halo { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }

@@ -37,6 +37,7 @@ const AUTO = {
   workout: 'אוטומטי: אימון שסומן כבוצע',
   kcal: 'אוטומטי: אכילה בתוך יעד הקלוריות',
   sleep: 'אוטומטי: הגעה ליעד השינה',
+  steps: 'אוטומטי: הגעה ליעד הצעדים',
 };
 
 /* ---------- אייקונים ---------- */
@@ -47,6 +48,7 @@ const I = {
   scale: svg('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8.5 9.5a5 5 0 0 1 7 0M12 9.5l1.5-2"/>'),
   food: svg('<path d="M3.5 12h17a8.5 8.5 0 0 1-17 0z"/><path d="M9 8.5c0-1.6 1.6-1.9 1.6-3.5M13.5 8.5c0-1.6 1.6-1.9 1.6-3.5"/>'),
   train: svg('<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>'),
+  steps: svg('<path d="M8.5 3.5c1.9 0 2.8 2 2.6 4.5-.2 2.3-1 3.7-2.6 3.7S6 10.3 5.9 8c-.1-2.5.7-4.5 2.6-4.5zM6.3 14h4.6c.1 2.9-.6 4.6-2.3 4.6s-2.4-1.7-2.3-4.6zM15.5 7.5c1.9 0 2.7 2 2.6 4.5-.1 2.3-1 3.7-2.6 3.7s-2.5-1.4-2.6-3.7c-.1-2.5.7-4.5 2.6-4.5zM13.3 18h4.6c.1 2.9-.6 4.6-2.3 4.6S13.2 20.9 13.3 18z"/>'),
   camera: svg('<path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13.2" r="3.3"/>'),
   flag: svg('<path d="M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12"/>'),
   cup: svg('<path d="M6 4h12l-1.6 15.2a1 1 0 0 1-1 .8H8.6a1 1 0 0 1-1-.8z"/>'),
@@ -61,7 +63,7 @@ const I = {
 /* ---------- מצב ושמירה ---------- */
 const DEFAULTS = {
   version: 1,
-  settings: { kcal: 1800, protein: 110, carbs: 180, fat: 60, waterMl: 2500, cupMl: 250, sleepH: 8, targetWeight: null },
+  settings: { kcal: 1800, protein: 110, carbs: 180, fat: 60, waterMl: 2500, cupMl: 250, sleepH: 8, targetWeight: null, stepsGoal: 8000, wakeTime: '07:00', waterEnd: '21:00' },
   days: {},        // 'YYYY-MM-DD' -> { water, sleep, weight }
   workouts: [],    // { id, date, title, type, duration, exercises:[{name,sets,reps,weight}], notes, done }
   templates: [],   // { id, title, type, duration, exercises }
@@ -117,6 +119,7 @@ function autoDone(kind, k) {
   const st = S.settings;
   if (kind === 'water') return (day(k).water || 0) >= st.waterMl;
   if (kind === 'sleep') return (day(k).sleep || 0) >= st.sleepH;
+  if (kind === 'steps') return (day(k).steps || 0) >= st.stepsGoal;
   if (kind === 'workout') return workoutsOn(k).some(w => w.done);
   if (kind === 'kcal') { const e = mealsOn(k).filter(m => m.eaten); return e.length > 0 && sumMeals(e).kcal <= st.kcal; }
   return false;
@@ -194,19 +197,54 @@ function challengeCard(k) {
   </section>`;
 }
 
+const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+/* כמה מים "אמורים" להיות עד עכשיו: היעד מתחלק באופן שווה בין שעת ההשכמה לשעת הסיום */
+function waterPace(k) {
+  if (k !== todayKey()) return null;
+  const st = S.settings, a = toMin(st.wakeTime) ?? 420, b = toMin(st.waterEnd) ?? 1260;
+  if (b <= a) return null;
+  const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+  const f = Math.max(0, Math.min(1, (m - a) / (b - a)));
+  return { expected: Math.round((st.waterMl * f) / 10) * 10, f, before: m < a };
+}
 function waterCard(k) {
   const st = S.settings, ml = day(k).water || 0, cup = st.cupMl || 250;
   const goalCups = Math.max(1, Math.round(st.waterMl / cup));
   const filled = Math.floor(ml / cup);
   const total = Math.min(24, Math.max(goalCups, filled));
+  const pace = waterPace(k);
+  const dueCups = pace ? Math.min(total, Math.ceil(pace.expected / cup - 0.01)) : 0;
   const cups = Array.from({ length: total }, (_, i) =>
-    `<button class="cup ${i < filled ? 'on' : ''}" data-act="water-set" data-v="${(i + 1) * cup}" aria-label="${fmt((i + 1) * cup)} מ״ל">${I.cup}</button>`).join('');
+    `<button class="cup ${i < filled ? 'on' : i < dueCups ? 'due' : ''}" data-act="water-set" data-v="${(i + 1) * cup}" aria-label="${fmt((i + 1) * cup)} מ״ל">${I.cup}</button>`).join('');
   return `<section class="card water">
     <div class="card-head"><h2 class="card-title">${I.drop} שתייה</h2>
       <div class="metric-val"><b>${liters(ml)}</b> מתוך ${liters(st.waterMl)} ליטר</div></div>
+    ${paceLine(ml, pace, cup)}
     <div class="cups">${cups}</div>
     <div class="row"><button class="btn soft" data-act="water" data-v="-${cup}" aria-label="הורדת כוס">−</button>
       <button class="btn water-btn" data-act="water" data-v="${cup}">+ כוס (${fmt(cup)} מ״ל)</button></div>
+  </section>`;
+}
+
+function paceLine(ml, pace, cup) {
+  if (!pace) return '';
+  const goal = S.settings.waterMl;
+  if (ml >= goal) return '<div class="pace ok">הגעת ליעד המים של היום</div>';
+  if (pace.before) return `<div class="pace">היום מתחילים לספור מ־${esc(S.settings.wakeTime)}</div>`;
+  const miss = pace.expected - ml;
+  if (miss <= cup / 2) return `<div class="pace ok">בקצב טוב · יעד לשעה זו: ${liters(pace.expected)} ל׳</div>`;
+  const n = Math.ceil(miss / cup);
+  return `<div class="pace behind">חסרות ${n === 1 ? 'כוס אחת' : n + ' כוסות'} כדי להיות בקצב · יעד לשעה זו: ${liters(pace.expected)} ל׳</div>`;
+}
+
+function stepsCard(k) {
+  const v = day(k).steps, g = S.settings.stepsGoal || 8000, p = v ? Math.min(100, (v / g) * 100) : 0;
+  return `<section class="card steps">
+    <div class="card-head"><h2 class="card-title">${I.steps} צעדים</h2>
+      <div class="metric-val">יעד ${fmt(g)}</div></div>
+    <div class="steps-row"><input id="stepsInput" type="text" inputmode="numeric" placeholder="כמה צעדים?" value="${v ? fmt(v) : ''}" aria-label="מספר צעדים">
+      <span class="muted small">${v ? (v >= g ? 'הגעת ליעד!' : `עוד ${fmt(g - v)}`) : 'את המספר רואים באפליקציית Health'}</span></div>
+    <div class="progress steps-bar"><span style="width:${p}%"></span></div>
   </section>`;
 }
 
@@ -300,6 +338,7 @@ function vToday() {
   ${challengeCard(k)}
   ${waterCard(k)}
   <div class="grid2">${sleepCard(k)}${weightCard(k)}</div>
+  ${stepsCard(k)}
   ${foodDayCard(k)}
   ${trainDayCard(k)}`;
 }
@@ -426,8 +465,8 @@ function barChart(field, goal, color, fmtv) {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="14 הימים האחרונים">
     <line class="gridl" x1="${pl}" x2="${W - pr}" y1="${H - pb}" y2="${H - pb}"/>
     <line class="goal" x1="${pl}" x2="${W - pr}" y1="${gy}" y2="${gy}" stroke="${color}"/>
-    <text x="${pl}" y="${gy - 5}" style="fill:${color}">יעד ${fmtv(goal)}</text>
-    ${bars}</svg>`;
+    ${bars}
+    <text x="${pl}" y="${gy - 5}" class="halo" style="fill:${color}">יעד ${fmtv(goal)}</text></svg>`;
 }
 
 /* ---------- תמונות (IndexedDB) ---------- */
@@ -515,6 +554,7 @@ function vBody() {
   }
   const water = barChart('water', st.waterMl, 'var(--water)', v => liters(v));
   const sleep = barChart('sleep', st.sleepH, 'var(--sleep)', v => fmt1(v));
+  const steps = barChart('steps', st.stepsGoal || 8000, 'var(--steps)', v => (v >= 1000 ? fmt1(v / 1000) + 'K' : fmt(v)));
   return `
   <section class="card weight"><div class="card-head"><h2 class="card-title">${I.scale} משקל</h2>
     ${last ? `<div class="metric-val"><b>${fmt1(last.v)}</b> ק״ג</div>` : ''}</div>
@@ -523,6 +563,8 @@ function vBody() {
     ${water || '<p class="empty">עדיין לא נרשמה שתייה.</p>'}</section>
   <section class="card sleep"><h2 class="card-title">${I.moon} שינה · 14 ימים אחרונים</h2>
     ${sleep || '<p class="empty">עדיין לא נרשמו שעות שינה.</p>'}</section>
+  <section class="card steps"><h2 class="card-title">${I.steps} צעדים · 14 ימים אחרונים</h2>
+    ${steps || '<p class="empty">עדיין לא נרשמו צעדים. מזינים אותם במסך "היום".</p>'}</section>
   <section class="card"><div class="card-head"><h2 class="card-title">${I.camera} תמונות מעקב</h2>
     <button class="btn soft small" data-act="photo-add">+ תמונה</button></div>${photosHtml()}</section>`;
 }
@@ -764,7 +806,11 @@ function openSettings() {
     <div class="settings-sec"><h3>תזונה ליום</h3>
       <div class="grid2">${f('kcal', 'קלוריות', s.kcal)}${f('protein', 'חלבון (ג׳)', s.protein)}${f('carbs', 'פחמימה (ג׳)', s.carbs)}${f('fat', 'שומן (ג׳)', s.fat)}</div></div>
     <div class="settings-sec"><h3>שתייה, שינה ומשקל</h3>
-      <div class="grid2">${f('waterMl', 'יעד מים (מ״ל)', s.waterMl)}${f('cupMl', 'גודל כוס (מ״ל)', s.cupMl)}${f('sleepH', 'יעד שינה (שעות)', s.sleepH, 'decimal')}${f('targetWeight', 'משקל יעד (ק״ג)', s.targetWeight, 'decimal', 'לא חובה')}</div></div>
+      <div class="grid2">${f('waterMl', 'יעד מים (מ״ל)', s.waterMl)}${f('cupMl', 'גודל כוס (מ״ל)', s.cupMl)}${f('sleepH', 'יעד שינה (שעות)', s.sleepH, 'decimal')}${f('targetWeight', 'משקל יעד (ק״ג)', s.targetWeight, 'decimal', 'לא חובה')}${f('stepsGoal', 'יעד צעדים', s.stepsGoal)}</div></div>
+    <div class="settings-sec"><h3>קצב שתייה</h3>
+      <p class="small muted">יעד המים מתחלק לאורך היום, ובמסך "היום" רואים אם יש פיגור.</p>
+      <div class="grid2"><label class="field"><span>מתחילים לשתות</span><input type="time" name="wakeTime" id="sf-wake" value="${esc(s.wakeTime)}"></label>
+        <label class="field"><span>מסיימים את היעד עד</span><input type="time" name="waterEnd" id="sf-wend" value="${esc(s.waterEnd)}"></label></div></div>
     <div class="form-actions"><button class="btn primary" type="submit">שמירת היעדים</button></div>
     <div class="settings-sec"><h3>גיבוי</h3>
       <p class="small muted">הנתונים והתמונות נשמרים רק בטלפון הזה. כדאי לייצא גיבוי מדי פעם ולשמור אותו בענן, ככה אפשר לשחזר אם מחליפים טלפון או מוחקים את האפליקציה.</p>
@@ -777,6 +823,9 @@ function openSettings() {
     Object.assign(S.settings, {
       kcal: g('kcal', 500, 8000, 1800), protein: g('protein', 0, 500, 0), carbs: g('carbs', 0, 1000, 0), fat: g('fat', 0, 400, 0),
       waterMl: g('waterMl', 250, 8000, 2500), cupMl: g('cupMl', 50, 1500, 250), sleepH: g('sleepH', 3, 14, 8),
+      stepsGoal: g('stepsGoal', 500, 60000, 8000),
+      wakeTime: toMin(fd.get('wakeTime')) != null ? fd.get('wakeTime') : '07:00',
+      waterEnd: toMin(fd.get('waterEnd')) != null ? fd.get('waterEnd') : '21:00',
       targetWeight: (() => { const v = num(fd.get('targetWeight')); return v && v > 20 ? v : null; })(),
     });
     save(); closeSheet(); render(); toast('היעדים נשמרו');
@@ -938,6 +987,10 @@ document.addEventListener('change', e => {
     const v = num(t.value);
     setDay(U.date, { weight: v && v > 20 && v < 400 ? Math.round(v * 10) / 10 : null });
     render();
+  } else if (t.id === 'stepsInput') {
+    const v = num(String(t.value).replace(/[^\d]/g, ''));
+    setDay(U.date, { steps: v && v > 0 && v < 200000 ? Math.round(v) : null });
+    render();
   } else if (t.id === 'wf-tpl') {
     const tp = S.templates.find(x => x.id === t.value); if (!tp) return;
     $('#wf-title').value = tp.title;
@@ -955,7 +1008,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
-  if (e.key === 'Enter' && e.target.id === 'weightInput') e.target.blur();
+  if (e.key === 'Enter' && (e.target.id === 'weightInput' || e.target.id === 'stepsInput')) e.target.blur();
 });
 document.addEventListener('submit', e => {
   if (e.target.id !== 'sheetForm') return;
@@ -970,6 +1023,13 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 
 render();
+// רענון כל דקה כדי שקצב השתייה יתעדכן לפי השעה
+setInterval(() => {
+  if (document.visibilityState !== 'visible' || U.tab !== 'today' || !$('#sheet').hidden) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return;
+  render();
+}, 60000);
 loadPhotos().then(() => { if (U.tab === 'body') render(); });
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
