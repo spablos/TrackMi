@@ -528,3 +528,12 @@ p { margin: 0; }
 .comp-row input[name=cG] { text-align: center; }
 .item .comps { font-size: 13.5px; color: var(--ink); line-height: 1.4; overflow-wrap: anywhere; }
 .item .comps .g { color: var(--food); font-weight: 800; white-space: nowrap; }
+
+/* Future days: planning only */
+.future-note { background: var(--surface-2); border-style: dashed; box-shadow: none; }
+.future-note p { font-size: 15px; color: var(--muted); }
+.future-note b { color: var(--ink); }
+.item .tick[aria-disabled="true"] { opacity: .35; }
+.check-line input:disabled { opacity: .4; }
+.check-line:has(input:disabled) { color: var(--muted); }
+.check-item[aria-disabled="true"] { opacity: .7; }

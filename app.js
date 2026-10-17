@@ -19,6 +19,8 @@ const dkey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate()
 const parseKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 const addDays = (k, n) => { const d = parseKey(k); d.setDate(d.getDate() + n); return dkey(d); };
 const todayKey = () => dkey(new Date());
+const isFuture = k => k > todayKey();
+const FUTURE_MSG = 'אי אפשר לסמן ליום שעוד לא הגיע';
 const diffDays = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86400000);
 const weekStart = k => addDays(k, -parseKey(k).getDay());
 const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -206,7 +208,7 @@ function checkItem(c, k, t) {
   const on = taskDone(c, k, t);
   const manual = (c.checks[k] || []).includes(t.id);
   const autoOnly = on && !manual;
-  return `<li><button class="check-item" role="checkbox" aria-checked="${on}" data-act="ch-check" data-date="${k}" data-task="${t.id}" ${autoOnly ? 'aria-disabled="true"' : ''}>
+  return `<li><button class="check-item" role="checkbox" aria-checked="${on}" data-act="ch-check" data-date="${k}" data-task="${t.id}" ${autoOnly || isFuture(k) ? 'aria-disabled="true"' : ''}>
     <span class="check-box">${I.check}</span><span class="txt">${esc(t.text)}</span>${t.auto ? '<span class="auto-tag">אוטומטי</span>' : ''}</button></li>`;
 }
 
@@ -355,7 +357,7 @@ const fillComps = items => { $('#compList').innerHTML = (items && items.length ?
 
 function mealItem(m) {
   return `<li class="item ${m.eaten ? 'done' : ''}">
-    <button class="tick" role="checkbox" aria-checked="${!!m.eaten}" data-act="meal-toggle" data-id="${m.id}" aria-label="נאכל: ${esc(m.name)}"><span class="check-box">${I.check}</span></button>
+    <button class="tick" role="checkbox" aria-checked="${!!m.eaten}" ${isFuture(m.date) ? 'aria-disabled="true"' : ''} data-act="meal-toggle" data-id="${m.id}" aria-label="נאכל: ${esc(m.name)}"><span class="check-box">${I.check}</span></button>
     <button class="body" data-act="meal-edit" data-id="${m.id}"><span class="slot-tag">${esc(m.slot)}</span><span class="t">${esc(m.name)}</span>
       ${m.items && m.items.length ? `<span class="comps">${itemsText(m.items)}</span>` : ''}
       ${m.protein || m.carbs || m.fat ? `<span class="s">ח׳ ${fmt(m.protein)} · פ׳ ${fmt(m.carbs)} · ש׳ ${fmt(m.fat)}</span>` : ''}</button>
@@ -366,7 +368,7 @@ function workoutItem(w) {
   if (w.exercises && w.exercises.length) bits.push(w.exercises.length === 1 ? 'תרגיל אחד' : `${w.exercises.length} תרגילים`);
   if (w.duration) bits.push(`${fmt(w.duration)} דק׳`);
   return `<li class="item ${w.done ? 'done' : ''}">
-    <button class="tick" role="checkbox" aria-checked="${!!w.done}" data-act="wo-toggle" data-id="${w.id}" aria-label="בוצע: ${esc(w.title)}"><span class="check-box">${I.check}</span></button>
+    <button class="tick" role="checkbox" aria-checked="${!!w.done}" ${isFuture(w.date) ? 'aria-disabled="true"' : ''} data-act="wo-toggle" data-id="${w.id}" aria-label="בוצע: ${esc(w.title)}"><span class="check-box">${I.check}</span></button>
     <button class="body" data-act="wo-edit" data-id="${w.id}"><span class="type-tag">${esc(w.type)}</span><span class="t">${esc(w.title)}</span>
       ${bits.length ? `<span class="s">${bits.join(' · ')}</span>` : ''}</button></li>`;
 }
@@ -405,9 +407,9 @@ function vToday() {
   ${isToday ? '' : '<button class="link-btn" data-act="date-today">חזרה להיום</button>'}
   ${challengeCard(k)}
   ${isToday ? streaksCard() : ''}
-  ${waterCard(k)}
+  ${isFuture(k) ? `<section class="card future-note"><p><b>היום הזה עוד לא הגיע.</b> אפשר לתכנן לו ארוחות ואימונים. שתייה, אכילה, שינה, משקל וצעדים מסמנים רק כשהיום מגיע.</p></section>` : `${waterCard(k)}
   <div class="grid2">${sleepCard(k)}${weightCard(k)}</div>
-  ${stepsCard(k)}
+  ${stepsCard(k)}`}
   ${foodDayCard(k)}
   ${trainDayCard(k)}`;
 }
@@ -922,7 +924,7 @@ function openWorkout(w, date) {
     <div class="field"><span class="field-label">תרגילים</span><div id="exList" class="ex-list">${(v.exercises || []).map(exRow).join('')}</div>
       <button type="button" class="btn soft small" data-act="ex-add">+ תרגיל</button></div>
     <label class="field"><span>הערות</span><textarea name="notes" id="wf-notes" rows="2" placeholder="איך הרגיש, מה לשפר בפעם הבאה">${esc(v.notes)}</textarea></label>
-    <label class="check-line"><input type="checkbox" name="done" id="wf-done" ${v.done ? 'checked' : ''}> האימון בוצע</label>
+    <label class="check-line"><input type="checkbox" name="done" id="wf-done" ${v.done && !isFuture(v.date) ? 'checked' : ''} ${isFuture(v.date) ? 'disabled' : ''}> האימון בוצע</label>
     ${isNew ? '<label class="check-line"><input type="checkbox" name="saveTpl" id="wf-savetpl"> לשמור גם כתבנית לשימוש חוזר</label>' : ''}
     <div class="form-actions"><button class="btn primary" type="submit">${isNew ? 'הוספה' : 'שמירה'}</button>
       ${isNew ? '' : `<button type="button" class="btn danger" data-act="confirm" data-do="wo-del" data-id="${v.id}">מחיקה</button>`}</div>
@@ -935,7 +937,7 @@ function openWorkout(w, date) {
       date: fd.get('date') || date || todayKey(),
       type: fd.get('type') || 'אחר',
       duration: num(fd.get('duration')),
-      exercises, notes: (fd.get('notes') || '').trim(), done: !!fd.get('done'),
+      exercises, notes: (fd.get('notes') || '').trim(), done: !!fd.get('done') && !isFuture(fd.get('date') || date || todayKey()),
     };
     if (isNew) {
       S.workouts.push({ id: uid(), ...data });
@@ -968,7 +970,7 @@ function openMeal(m, date) {
       <label class="field"><span>פחמימה ג׳</span><input name="carbs" id="mf-c" inputmode="decimal" value="${v.carbs ?? ''}" placeholder="0"></label>
       <label class="field"><span>שומן ג׳</span><input name="fat" id="mf-f" inputmode="decimal" value="${v.fat ?? ''}" placeholder="0"></label>
     </div>
-    <label class="check-line"><input type="checkbox" name="eaten" id="mf-eaten" ${v.eaten ? 'checked' : ''}> כבר נאכל</label>
+    <label class="check-line"><input type="checkbox" name="eaten" id="mf-eaten" ${v.eaten && !isFuture(v.date) ? 'checked' : ''} ${isFuture(v.date) ? 'disabled' : ''}> כבר נאכל</label>
     <label class="check-line"><input type="checkbox" name="fav" id="mf-fav" ${isFav ? 'checked' : ''}> שמירה בארוחות המועדפות</label>
     <div class="form-actions"><button class="btn primary" type="submit">${isNew ? 'הוספה' : 'שמירה'}</button>
       ${isNew ? '' : `<button type="button" class="btn danger" data-act="confirm" data-do="meal-del" data-id="${v.id}">מחיקה</button>`}</div>
@@ -978,7 +980,7 @@ function openMeal(m, date) {
     const data = {
       name, slot: fd.get('slot') || 'ביניים', date: fd.get('date') || date || todayKey(),
       kcal: num(fd.get('kcal')) || 0, protein: num(fd.get('protein')) || 0, carbs: num(fd.get('carbs')) || 0, fat: num(fd.get('fat')) || 0,
-      items: readComps($('#sheetForm')), eaten: !!fd.get('eaten'),
+      items: readComps($('#sheetForm')), eaten: !!fd.get('eaten') && !isFuture(fd.get('date') || date || todayKey()),
     };
     if (isNew) S.meals.push({ id: uid(), ...data }); else Object.assign(m, data);
     const f = { name, kcal: data.kcal, protein: data.protein, carbs: data.carbs, fat: data.fat, items: clone(data.items) };
@@ -1171,18 +1173,21 @@ document.addEventListener('click', e => {
     case 'goto-day': U.date = ds.date; U.tab = 'today'; render(); window.scrollTo(0, 0); break;
     case 'week': U.week = addDays(U.week, 7 * +ds.n); render(); break;
     case 'week-now': U.week = weekStart(todayKey()); render(); break;
-    case 'water': setDay(U.date, { water: Math.max(0, (day(U.date).water || 0) + +ds.v) || null }); render(); break;
+    case 'water': if (isFuture(U.date)) { toast(FUTURE_MSG); break; } setDay(U.date, { water: Math.max(0, (day(U.date).water || 0) + +ds.v) || null }); render(); break;
     case 'water-set': {
+      if (isFuture(U.date)) { toast(FUTURE_MSG); break; }
       const cur = day(U.date).water || 0, cup = S.settings.cupMl;
       let v = +ds.v; if (v <= cur && v > cur - cup) v -= cup;
       setDay(U.date, { water: Math.max(0, v) || null }); render(); break;
     }
     case 'sleep': {
+      if (isFuture(U.date)) { toast(FUTURE_MSG); break; }
       const h = day(U.date).sleep, step = +ds.v;
       const nv = h == null ? (step > 0 ? S.settings.sleepH : S.settings.sleepH - 0.5) : Math.max(0, Math.min(16, h + step));
       setDay(U.date, { sleep: nv }); render(); break;
     }
     case 'ch-check': {
+      if (isFuture(ds.date)) { toast(FUTURE_MSG); break; }
       const c = activeCh(); if (!c) break;
       if (el.getAttribute('aria-disabled') === 'true') { toast('המשימה הזו הושלמה אוטומטית לפי הנתונים'); break; }
       const k = ds.date, list = c.checks[k] || [];
@@ -1202,7 +1207,7 @@ document.addEventListener('click', e => {
     case 'lift-open': openLift(ds.id); break;
     case 'lift-edit': { const l = S.lifts.find(x => x.id === ds.id); if (l) openLiftEdit(l); break; }
     case 'wo-edit': { const w = S.workouts.find(x => x.id === ds.id); if (w) openWorkout(w); break; }
-    case 'wo-toggle': { const w = S.workouts.find(x => x.id === ds.id); if (w) { w.done = !w.done; save(); render(); } break; }
+    case 'wo-toggle': { const w = S.workouts.find(x => x.id === ds.id); if (w && isFuture(w.date)) { toast(FUTURE_MSG); break; } if (w) { w.done = !w.done; save(); render(); } break; }
     case 'tpl-use': {
       const t = S.templates.find(x => x.id === ds.id); if (!t) break;
       S.workouts.push({ id: uid(), date: todayKey(), title: t.title, type: t.type, duration: t.duration, exercises: clone(t.exercises), notes: '', done: false });
@@ -1225,7 +1230,7 @@ document.addEventListener('click', e => {
       $('#mf-fav').checked = true; break;
     }
     case 'meal-edit': { const m = S.meals.find(x => x.id === ds.id); if (m) openMeal(m); break; }
-    case 'meal-toggle': { const m = S.meals.find(x => x.id === ds.id); if (m) { m.eaten = !m.eaten; save(); render(); } break; }
+    case 'meal-toggle': { const m = S.meals.find(x => x.id === ds.id); if (m && isFuture(m.date)) { toast(FUTURE_MSG); break; } if (m) { m.eaten = !m.eaten; save(); render(); } break; }
     case 'copy-week': copyWeek(ds.what); break;
     case 'ex-add': { $('#exList').insertAdjacentHTML('beforeend', exRow()); const rows = $$('#exList .exn'); rows[rows.length - 1].focus(); break; }
     case 'task-add': { $('#taskList').insertAdjacentHTML('beforeend', taskRow()); const rows = $$('#taskList input'); rows[rows.length - 1].focus(); break; }
@@ -1250,6 +1255,11 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if ((t.id === 'weightInput' || t.id === 'stepsInput') && isFuture(U.date)) { toast(FUTURE_MSG); render(); return; }
+  if (t.id === 'mf-date' || t.id === 'wf-date') {
+    const box = $(t.id === 'mf-date' ? '#mf-eaten' : '#wf-done');
+    if (box) { box.disabled = isFuture(t.value); if (box.disabled) box.checked = false; }
+  }
   if (t.id === 'weightInput') {
     const v = num(t.value);
     setDay(U.date, { weight: v && v > 20 && v < 400 ? Math.round(v * 10) / 10 : null });
