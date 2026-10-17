@@ -1,6 +1,6 @@
 // TrackMi service worker: keeps the app working offline.
 // After changing app files, bump CACHE so phones pick up the new version.
-const CACHE = 'trackmi-v5';
+const CACHE = 'trackmi-v6';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
